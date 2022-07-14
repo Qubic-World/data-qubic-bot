@@ -55,7 +55,7 @@ def admin_scores_pretty(admin_scores: list):
         if(score > 0 and index < 676):
             list_item = f"{index + 1:>4}. {id} - {score} - {date_time}"
         else:
-            list_item = f"{index + 1:>4}. {id} - {date_time}"
+            list_item = f"{index + 1:>4}. {id} - None - {date_time}"
 
         pretty_list.append(list_item)
 
