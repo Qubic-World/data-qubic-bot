@@ -1,6 +1,5 @@
 import json
 from discord.ext import commands
-from file import download_file
 import asyncio
 from threading import Lock
 
