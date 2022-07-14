@@ -26,7 +26,7 @@ class AdminCog(BaseCog):
         if len(parts) <= 0:
             return file_name
 
-        return parts[0] + "_" + str(datetime.utcnow().timestamp) + "." + parts[1]
+        return parts[0] + "_" + str(datetime.utcnow().timestamp()) + "." + parts[1]
 
     async def _reply(self, ctx: Context, content):
         await ctx.reply(content, delete_after=self._delete_after_time)
