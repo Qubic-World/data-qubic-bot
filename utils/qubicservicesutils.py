@@ -46,7 +46,7 @@ async def get_user_revenues(user_id: str):
     raise None
 
 
-async def get_pretty_revenues():
+async def get_pretty_revenues()->list:
     revenues = await get_revenues()
 
     pretty_revenues = []

@@ -1,20 +1,29 @@
-from datetime import datetime
+from dataclasses import replace
 import logging
-import aiofiles
-from discord.ext.commands import Context
-from discord import File
+from datetime import datetime
 
+import aiofiles
+from discord import File
+from discord.ext.commands import Context
 
 SCORE_FIELD = "score"
 ID_FIELD = "id"
 TIMESTAMP_FIELD = 'timestamp'
 INVALID_ID = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACDFMDM"
 
-async def reply_data_as_file(ctx: Context, file_name: str, data:str, delete_after:float = None):
+
+async def reply_data_as_file(ctx: Context, file_name: str, data: str, delete_after: float = None):
     async with aiofiles.open(file_name, "w") as file:
         await file.write(data)
 
     await ctx.reply(file=File(file_name), delete_after=delete_after)
+
+
+def prepare_file_name(file_name: str) -> str:
+    parts = file_name.split(".")
+    if len(parts) <= 0:
+        return file_name
+    return parts[0] + "_" + str(datetime.utcnow().replace(microsecond=0, second=0).timestamp()) + "." + parts[1]
 
 
 def admin_scores_pretty(admin_scores: list):
@@ -60,6 +69,7 @@ def admin_scores_pretty(admin_scores: list):
         pretty_list.append(list_item)
 
     return pretty_list
+
 
 async def get_user_score_from_admin(admin_scores: list, user_id: str) -> dict:
     if len(admin_scores) <= 0:

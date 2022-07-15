@@ -1,6 +1,6 @@
+from email.message import Message
 import logging
 import os
-from datetime import datetime
 
 from bd.mongo import get_admin_scores
 from discord import Client
@@ -8,7 +8,7 @@ from discord.ext import commands
 from discord.ext.commands import Context
 from pool.pool import pool
 from utils.qubicservicesutils import get_pretty_revenues, get_user_revenues
-from utils.utils import (admin_scores_pretty, get_user_score_from_admin,
+from utils.utils import (admin_scores_pretty, get_user_score_from_admin, prepare_file_name,
                          reply_data_as_file)
 
 from cogs.basecog import BaseCog
@@ -19,14 +19,6 @@ class AdminCog(BaseCog):
         super().__init__(bot)
         self.__admin_scores_file_name = "admin_scores.txt"
         self.__revenues_file_name = "revenues.txt"
-
-    @classmethod
-    def _prepare_file_name(self, file_name: str) -> str:
-        parts = file_name.split(".")
-        if len(parts) <= 0:
-            return file_name
-
-        return parts[0] + "_" + str(datetime.utcnow().timestamp()) + "." + parts[1]
 
     async def _reply(self, ctx: Context, content):
         await ctx.reply(content, delete_after=self._delete_after_time)
@@ -70,13 +62,14 @@ class AdminCog(BaseCog):
                 await self._reply_missing_data(ctx)
                 return
 
-        pretty_data = admin_scores_pretty(admin_scores)
-        if len(pretty_data) <= 0:
-            await self._reply_missing_data(ctx)
-            return
+        # pretty_data = admin_scores_pretty(admin_scores)
+        # if len(pretty_data) <= 0:
+        #     await self._reply_missing_data(ctx)
+        #     return
 
-        file_name = self._prepare_file_name(self.__admin_scores_file_name)
-        await reply_data_as_file(ctx, file_name, f"{os.linesep}".join(pretty_data), self._delete_after_time)
+        # file_name = prepare_file_name(self.__admin_scores_file_name)
+        # await reply_data_as_file(ctx, file_name, f"{os.linesep}".join(pretty_data), self._delete_after_time)
+
 
     async def __revenues(self, ctx: Context, user_id: str = ""):
         if user_id != "":
@@ -93,12 +86,13 @@ class AdminCog(BaseCog):
                 await self._reply_missing_data(ctx)
                 return
         else:
-            try:
-                pretty_revenues = await get_pretty_revenues()
-            except Exception as e:
-                logging.warning(e)
-                await self._reply_missing_data(ctx)
-                return
+            pass 
+            # try:
+            #     pretty_revenues = await get_pretty_revenues()
+            # except Exception as e:
+            #     logging.warning(e)
+            #     await self._reply_missing_data(ctx)
+            #     return
 
-            file_name = self._prepare_file_name(self.__revenues_file_name)
-            await reply_data_as_file(ctx, file_name, f"{os.linesep}".join(pretty_revenues), delete_after=self._delete_after_time)
+            # file_name = prepare_file_name(self.__revenues_file_name)
+            # await reply_data_as_file(ctx, file_name, f"{os.linesep}".join(pretty_revenues), delete_after=self._delete_after_time)

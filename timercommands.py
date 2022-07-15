@@ -1,14 +1,16 @@
 import asyncio
 from datetime import datetime
+from io import BytesIO
 import logging
 import os
 
-from discord import Client, Message, Embed
+from discord import Client, Message, Embed, Attachment, File
 from dotenv import load_dotenv
 from pool.pool import pool
-from utils.qubicservicesutils import get_tick
+from utils.qubicservicesutils import get_pretty_revenues, get_tick
 
-from bd.mongo import get_min_max_admin_scores
+from bd.mongo import get_admin_scores, get_min_max_admin_scores, get_pretty_scores
+from utils.utils import admin_scores_pretty, prepare_file_name
 
 __TICK_FIELD = "tick"
 __AMOUNT_FIELD = "amount"
@@ -37,7 +39,7 @@ class TimerCommands():
             if len(embeds) <= 0:
                 continue
 
-            e:Embed = embeds[-1]
+            e: Embed = embeds[-1]
             if message.author == self.__bot.user and e.title.find(startwith) != -1:
                 tick_messages.append(message)
 
@@ -68,7 +70,7 @@ class TimerCommands():
             return message.author == self.__bot.user
 
         while True:
-            l = len(await self.__tick_channel.purge(check=is_me)) 
+            l = len(await self.__tick_channel.purge(check=is_me))
             print(l)
             if l <= 0:
                 break
@@ -125,9 +127,78 @@ class TimerCommands():
             else:
                 await self.__tick_channel.send(embed=e)
 
+    async def __get_last_file_message(self, file_name: str, limit=100):
+        message: Message = None
+        async for message in self.__tick_channel.history(limit=limit):
+            a: Attachment = None
+            for a in message.attachments:
+                if a.filename.find(file_name) != -1:
+                    return message
+
+        return None
+
+    async def __send_revenues(self):
+        try:
+            revenues = await get_pretty_revenues()
+        except Exception as e:
+            logging.warning(e)
+            return
+
+        if len(revenues) <= 0:
+            logging.warning("__send_revenues: revenues is empty")
+            return
+
+        file_name = prepare_file_name('revenues.txt')
+        message: Message = await self.__get_last_file_message("revenues")
+        await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(revenues))
+
+
+    async def __send_admin_scores(self):
+        admin_scores = await get_admin_scores()
+        if len(admin_scores) <= 0:
+            logging.warning("__send_admin_scores: admin_scores is empty")
+            return
+
+        pretty_data = admin_scores_pretty(admin_scores)
+        file_name = prepare_file_name('admin_scores.txt')
+        message: Message = await self.__get_last_file_message("admin_scores")
+        await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(pretty_data))
+
+    async def __send_edit_file_message(self, message: Message = None, file_name: str = "", content: str = ""):
+        if file_name == None:
+            logging.warning(
+                "TimerCommands.__send_edit_file_message: file_name is empty")
+            return
+
+        b = content.encode('utf-8')
+
+        file = File(BytesIO(b), filename=file_name)
+
+        time = str(datetime.utcnow().replace(second=0, microsecond=0))
+        if message != None:
+            await message.delete()
+
+        await self.__tick_channel.send(time, file=file)
+
+    async def __send_scores(self):
+        try:
+            scores = await get_pretty_scores()
+            print(scores[:10])
+        except Exception as e:
+            logging.warning(e)
+            return
+
+        file_name = prepare_file_name('scores.txt')
+        message: Message = await self.__get_last_file_message("scores")
+        await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(scores))
+        
+
     async def loop(self):
         while True:
             await pool.add_command(self.__send_min_max)
             await pool.add_command(self.__send_tick)
+            await pool.add_command(self.__send_revenues)
+            await pool.add_command(self.__send_admin_scores)
+            await pool.add_command(self.__send_scores)
 
             await asyncio.sleep(60)

@@ -1,9 +1,10 @@
 import asyncio
-from datetime import datetime
 import logging
 import os
+from datetime import datetime
 from urllib.parse import quote_plus
 
+import aiohttp
 import motor.motor_asyncio
 from bson import SON
 from dotenv import load_dotenv
@@ -65,31 +66,27 @@ async def get_user_scores(user_id: str):
     return None
 
 
+#TODO: replace
 async def get_scores():
-    pipeline = [
-        {
-            u"$sort": SON([(u"timestamp", -1)])
-        },
-        {
-            u"$limit": 5000.0
-        }
-    ]
-
-    found_documets = scores_collection.aggregate(pipeline, allowDiskUse=True)
     try:
-        return await asyncio.wait_for(found_documets.to_list(length=None), __CONNECT_TIMEOUT)
-    except asyncio.exceptions.TimeoutError:
-        raise asyncio.exceptions.TimeoutError(
-            "get_admin_scores: Database connection time has expired")
+        async with aiohttp.ClientSession() as session:
+            url = "http://qubic.world/api/v1/network/scores/"
+
+            async with session.get(url) as resp:
+                return await resp.json(encoding='utf-8')
+    except Exception as e:
+        logging.error(e)
+        return []
+
 
 async def get_min_max_admin_scores():
     admin_scores = await get_admin_scores()
     if len(admin_scores) <= 0:
         raise ValueError()
 
-
-    min_index = 675 if len(admin_scores) > 675 else -1 
+    min_index = 675 if len(admin_scores) > 675 else -1
     return admin_scores[min_index][__SCORE_FIELD], admin_scores[0][__SCORE_FIELD]
+
 
 async def get_admin_scores():
     pipeline = [
