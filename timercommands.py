@@ -67,7 +67,7 @@ class TimerCommands():
         logging.debug("TimerCommands.__cleanup")
 
         def is_me(message: Message):
-            return message.author == self.__bot.user
+            return True or message.author == self.__bot.user
 
         while True:
             l = len(await self.__tick_channel.purge(check=is_me))
@@ -132,7 +132,7 @@ class TimerCommands():
         async for message in self.__tick_channel.history(limit=limit):
             a: Attachment = None
             for a in message.attachments:
-                if a.filename.find(file_name) != -1:
+                if a.filename.startswith(file_name):
                     return message
 
         return None
@@ -157,7 +157,7 @@ class TimerCommands():
         admin_scores = await get_admin_scores()
         if len(admin_scores) <= 0:
             logging.warning("__send_admin_scores: admin_scores is empty")
-            return
+        #     return
 
         pretty_data = admin_scores_pretty(admin_scores)
         file_name = prepare_file_name('admin_scores.txt')
@@ -183,13 +183,13 @@ class TimerCommands():
     async def __send_scores(self):
         try:
             scores = await get_pretty_scores()
-            print(scores[:10])
         except Exception as e:
             logging.warning(e)
             return
 
         file_name = prepare_file_name('scores.txt')
         message: Message = await self.__get_last_file_message("scores")
+        print(message)
         await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(scores))
         
 
