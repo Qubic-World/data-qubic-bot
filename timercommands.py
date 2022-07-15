@@ -1,8 +1,9 @@
 import asyncio
+from datetime import datetime
 import logging
 import os
 
-from discord import Client, Message
+from discord import Client, Message, Embed
 from dotenv import load_dotenv
 from pool.pool import pool
 from utils.qubicservicesutils import get_tick
@@ -23,6 +24,10 @@ class TimerCommands():
             raise ValueError("__tick_channel cannot be None")
 
         self.__background_tasks = []
+    
+    @staticmethod
+    def get_utc():
+        return datetime.utcnow().replace(second=0, microsecond=0)
 
     async def __get_messages_startwith(self, startwith: str = "", limit: int = 200) -> list:
         tick_messages = []
@@ -72,11 +77,12 @@ class TimerCommands():
         try:
             min, max = await get_min_max_admin_scores()
             message = await self.__get_last_minmax_message()
-            message_str = f"```Admin scores [min..max]:\n[{min}..{max}]```"
+            e = Embed(title="Admin scores [min..max]", description=f"[{min}..{max}]")
+            e.set_footer(text=str(TimerCommands.get_utc()))
             if message != None:
-                await message.edit(content=message_str)
+                await message.edit(embed=e)
             else:
-                await self.__tick_channel.send(message_str)
+                await self.__tick_channel.send(embed=e)
         except Exception as e:
             logging.warning(e)
 
@@ -100,11 +106,12 @@ class TimerCommands():
 
         if len(pretty_tick) > 0:
             message: Message = await self.__get_last_tick_message()
-            message_str = str(f"```Ticks:{os.linesep}" + f"{os.linesep}".join(pretty_tick) + "```")
+            e = Embed(title="Ticks", description=f"{os.linesep}".join(pretty_tick))
+            e.set_footer(text=str(TimerCommands.get_utc()))
             if message != None:
-                await message.edit(content=message_str)
+                await message.edit(embed=e)
             else:
-                await self.__tick_channel.send(message_str)
+                await self.__tick_channel.send(embed=e)
 
     async def loop(self):
         while True:
