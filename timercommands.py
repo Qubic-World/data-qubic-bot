@@ -24,15 +24,21 @@ class TimerCommands():
             raise ValueError("__tick_channel cannot be None")
 
         self.__background_tasks = []
-    
+
     @staticmethod
     def get_utc():
         return datetime.utcnow().replace(second=0, microsecond=0)
 
     async def __get_messages_startwith(self, startwith: str = "", limit: int = 200) -> list:
         tick_messages = []
+        message: Message = None
         async for message in self.__tick_channel.history(limit=limit):
-            if message.author == self.__bot.user and message.content.find(startwith) != -1:
+            embeds = message.embeds
+            if len(embeds) <= 0:
+                continue
+
+            e:Embed = embeds[-1]
+            if message.author == self.__bot.user and e.title.find(startwith) != -1:
                 tick_messages.append(message)
 
         return tick_messages
@@ -46,10 +52,10 @@ class TimerCommands():
     async def __get_all_tick_message(self, limit: int = 200) -> list:
         return await self.__get_messages_startwith(startwith="Tick", limit=limit)
 
-    async def __get_minmax_messages(self, limit:int = 200)->list:
-        return await self.__get_messages_startwith(startwith="Admin scores [min..max]:", limit=limit)
+    async def __get_minmax_messages(self, limit: int = 200) -> list:
+        return await self.__get_messages_startwith(startwith="Admin scores [min..max]", limit=limit)
 
-    async def __get_last_minmax_message(self)->Message:
+    async def __get_last_minmax_message(self) -> Message:
         messages = await self.__get_minmax_messages()
         if len(messages) > 0:
             return messages[0]
@@ -58,17 +64,21 @@ class TimerCommands():
     async def __cleanup(self):
         logging.debug("TimerCommands.__cleanup")
 
-        tick_messages = await self.__get_all_tick_message(None)
-        minmax_messages = await self.__get_all_tick_message(None)
-        all_messages = tick_messages + minmax_messages
-        
-        while len(all_messages) > 0:
-            logging.debug(f"Message len: {len(all_messages)}")
-            await self.__tick_channel.delete_messages(all_messages[:100])
-            all_messages = all_messages[:100]
+        def is_me(message: Message):
+            return message.author == self.__bot.user
+
+        while True:
+            l = len(await self.__tick_channel.purge(check=is_me)) 
+            print(l)
+            if l <= 0:
+                break
+
+        return
 
     async def start(self):
-        # await self.__cleanup()
+        print("Cleanup")
+        await self.__cleanup()
+        print("Start")
         task = asyncio.create_task(self.loop())
         task.add_done_callback(self.__background_tasks.remove)
         self.__background_tasks.append(task)
@@ -77,7 +87,8 @@ class TimerCommands():
         try:
             min, max = await get_min_max_admin_scores()
             message = await self.__get_last_minmax_message()
-            e = Embed(title="Admin scores [min..max]", description=f"[{min}..{max}]")
+            e = Embed(title="Admin scores [min..max]",
+                      description=f"[{min}..{max}]")
             e.set_footer(text=str(TimerCommands.get_utc()))
             if message != None:
                 await message.edit(embed=e)
@@ -106,7 +117,8 @@ class TimerCommands():
 
         if len(pretty_tick) > 0:
             message: Message = await self.__get_last_tick_message()
-            e = Embed(title="Ticks", description=f"{os.linesep}".join(pretty_tick))
+            e = Embed(title="Ticks",
+                      description=f"{os.linesep}".join(pretty_tick))
             e.set_footer(text=str(TimerCommands.get_utc()))
             if message != None:
                 await message.edit(embed=e)

@@ -2,13 +2,14 @@ import os
 import string
 
 import discord
+from discord import Intents
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from timercommands import TimerCommands
 from cogs.admincog import AdminCog
 from cogs.qubiccog import QubicCog
 from pool.pool import pool
+from timercommands import TimerCommands
 from transfer import transfer
 
 version: str = "0.4.0"
@@ -20,7 +21,10 @@ channel_name: string
 mongo_username: string
 mongo_pswd: string
 mongo_uri: string
-client = commands.Bot(command_prefix='/')
+intents = Intents.default()
+intents.members = True
+intents.messages = True
+client = commands.Bot(command_prefix='/', intents=intents)
 
 
 @client.event
