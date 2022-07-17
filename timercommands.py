@@ -27,7 +27,8 @@ class TimerCommands():
 
         self.__background_tasks = []
 
-        self.__functions:list = [self.__send_min_max, self.__send_tick, self.__send_revenues, self.__send_admin_scores, self.__send_scores]
+        self.__functions: list = [self.__send_min_max, self.__send_tick,
+                                  self.__send_revenues, self.__send_admin_scores, self.__send_scores]
 
     @staticmethod
     def get_utc():
@@ -159,7 +160,6 @@ class TimerCommands():
         message: Message = await self.__get_last_file_message("revenues")
         await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(revenues))
 
-
     async def __send_admin_scores(self):
         admin_scores = await get_admin_scores()
         if len(admin_scores) <= 0:
@@ -194,10 +194,12 @@ class TimerCommands():
             logging.warning(e)
             return
 
+        if len(scores) <= 0:
+            return
+
         file_name = prepare_file_name('scores.txt')
         message: Message = await self.__get_last_file_message("scores")
         await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(scores))
-        
 
     async def loop(self):
         while True:
