@@ -205,7 +205,18 @@ class TimerCommands():
         while True:
             tasks = []
             for function in self.__functions:
-                tasks.append(asyncio.create_task(function()))
-
+                tasks.append(asyncio.create_task(function(), name=function.__name__))
             tasks.append(asyncio.create_task(asyncio.sleep(60)))
-            await asyncio.wait(tasks)
+
+            done, pending = await asyncio.wait(tasks, timeout=61, return_when=asyncio.ALL_COMPLETED)
+            task: asyncio.Task = None
+            for task in done:
+                e = task.exception()
+                name = task.get_name()
+                if isinstance(e, Exception):
+                    print(f"{name} threw {type(e)}")
+
+            for task in pending:
+                name = task.get_name()
+                print(f"{name} is pending")
+                task.cancel()
