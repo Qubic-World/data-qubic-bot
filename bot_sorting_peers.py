@@ -1,16 +1,20 @@
+import asyncio
+import logging
 import os
 import string
+from typing import Optional
 
 import discord
 from discord import Intents
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from cogs.admincog import AdminCog
-from cogs.qubiccog import QubicCog
-from pool.pool import pool
+# from cogs.admincog import AdminCog
+# from cogs.qubiccog import QubicCog
+# from pool.pool import pool
 from timercommands import TimerCommands
-from transfer import transfer
+# from transfer import transfer
+from nats.aio.client import Client
 
 version: str = "0.4.0"
 
@@ -26,15 +30,22 @@ intents.members = True
 intents.messages = True
 client = commands.Bot(command_prefix='/', intents=intents)
 
+__nc: Optional[Client] = None
+
 
 @client.event
 async def on_ready():
+    from custom_nats.custom_nats import Nats
+
     print(f"Bot: {client.user} Ready!")
     print(f"Version: {version}")
 
-    pool.start()
+    # pool.start()
+    logging.info('Connect to the nats server')
+    nc = Nats()
+    await nc.connect()
 
-    timer_commands = TimerCommands(client)
+    timer_commands = TimerCommands(client, nc)
     await timer_commands.start()
 
 
@@ -56,31 +67,31 @@ async def on_message(message):
         await client.process_commands(message)
         return
 
-    if not is_valid_author(message.author):
-        return
+    # if not is_valid_author(message.author):
+    #     return
 
     if message.channel.name != channel_name:
         return
 
 
 def main():
+    import nats
+
     global token
-    global master_name
-    global master_id
-    global channel_name
+    # global channel_name
+    global __nc
 
     load_dotenv()
 
-    token = os.getenv("ACCESS_TOKEN")
-    master_name = os.getenv("MASTER_NAME")
-    master_id = int(os.getenv("MASTER_ID"))
-    channel_name = os.getenv("CHANNEL_NAME")
+    token = os.getenv("ACCESS_TOKEN", '')
+    # channel_name = os.getenv("CHANNEL_NAME")
 
-    client.add_cog(AdminCog(client))
-    client.add_cog(QubicCog(client))
-    client.add_command(transfer)
+    # client.add_cog(AdminCog(client))
+    # client.add_cog(QubicCog(client))
+    # client.add_command(transfer)
     client.run(token)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

@@ -1,38 +1,67 @@
 import asyncio
-from datetime import datetime
-from io import BytesIO
 import logging
 import os
+from datetime import datetime
+from io import BytesIO
+from typing import Optional
 
-from discord import Client, Message, Embed, Attachment, File
+from custom_nats.custom_nats import Nats
+from custom_nats.handler import Handler, HandlerStarter
+from discord import Attachment, Client, Embed, File, Message
 from dotenv import load_dotenv
-from pool.pool import pool
-from utils.qubicservicesutils import get_pretty_revenues, get_tick
+from nats.aio.msg import Msg
+from qubic.qubicdata import DataSubjects
 
-from bd.mongo import get_admin_scores, get_min_max_admin_scores, get_pretty_scores
-from utils.utils import admin_scores_pretty, prepare_file_name
+# from bd.mongo import (get_admin_scores, get_min_max_admin_scores,
+#                       get_pretty_scores)
+# from utils.qubicservicesutils import get_pretty_revenues
+# from utils.utils import admin_scores_pretty, prepare_file_name
 
-__TICK_FIELD = "tick"
-__AMOUNT_FIELD = "amount"
+_ticks = dict()
+
+
+class HandlerTick(Handler):
+    async def get_sub(self):
+        if self._nc.is_disconected:
+            return None
+
+        return await self._nc.subscribe(DataSubjects.TICKS)
+
+    async def _handler_msg(self, msg: Msg):
+        import json
+
+        if msg is None or len(msg.data) <= 0:
+            return
+
+        try:
+            logging.info('Got the tics')
+            global _ticks
+            _ticks = json.loads(msg.data)
+        except Exception as e:
+            logging.exception(e)
+            return
 
 
 class TimerCommands():
-    def __init__(self, bot: Client) -> None:
+    def __init__(self, bot: Client, nc: Optional[Nats] = None) -> None:
         self.__bot: Client = bot
         load_dotenv()
         self.__tick_channel = bot.get_channel(
-            int(os.getenv("TICK_CHANNEL_ID")))
+            int(os.getenv("STATS_CHANNEL_ID")))
         if self.__tick_channel == None:
             raise ValueError("__tick_channel cannot be None")
 
         self.__background_tasks = []
 
-        self.__functions: list = [self.__send_min_max, self.__send_tick,
-                                  self.__send_revenues, self.__send_admin_scores, self.__send_scores]
+        # self.__functions: list = [self.__send_min_max, self.__send_tick,
+        #                           self.__send_revenues, self.__send_admin_scores, self.__send_scores]
+        self.__functions: list = [self.__send_tick]
+
+        self.__nc = nc
 
     @staticmethod
     def get_utc():
-        return datetime.utcnow().replace(second=0, microsecond=0)
+        return datetime.utcnow().replace(microsecond=0)
 
     async def __get_messages_startwith(self, startwith: str = "", limit: int = 200) -> list:
         tick_messages = []
@@ -93,36 +122,34 @@ class TimerCommands():
         task.add_done_callback(self.__background_tasks.remove)
         self.__background_tasks.append(task)
 
-    async def __send_min_max(self):
-        try:
-            min, max = await get_min_max_admin_scores()
-            message = await self.__get_last_minmax_message()
-            e = Embed(title="Admin scores [min..max]",
-                      description=f"[{min}..{max}]")
-            e.set_footer(text=str(TimerCommands.get_utc()))
-            if message != None:
-                await message.edit(embed=e)
-            else:
-                await self.__tick_channel.send(embed=e)
-        except Exception as e:
-            logging.warning(e)
+        self.__background_tasks.append(asyncio.create_task(
+            HandlerStarter.start(HandlerTick(self.__nc))))
+
+    # async def __send_min_max(self):
+    #     try:
+    #         min, max = await get_min_max_admin_scores()
+    #         message = await self.__get_last_minmax_message()
+    #         e = Embed(title="Admin scores [min..max]",
+    #                   description=f"[{min}..{max}]")
+    #         e.set_footer(text=str(TimerCommands.get_utc()))
+    #         if message != None:
+    #             await message.edit(embed=e)
+    #         else:
+    #             await self.__tick_channel.send(embed=e)
+    #     except Exception as e:
+    #         logging.warning(e)
 
     async def __send_tick(self):
-        try:
-            tick_data = await get_tick()
-        except Exception as e:
-            logging.warning(e)
-            return
+        import itertools
+        global _ticks
 
         pretty_tick = []
-        for data in tick_data[:10]:
-            try:
-                tick = data["tick"] - 1
-                amount = data["amount"]
-            except Exception as e:
-                logging.warning(e)
-                return
+        pairs = [(k, len(list(g)))
+                 for k, g in itertools.groupby(sorted(_ticks.values(), reverse=True))]
 
+        for k, v in pairs:
+            tick = k - 1
+            amount = v
             pretty_tick.append(f"{tick}: {amount}")
 
         if len(pretty_tick) > 0:
@@ -145,31 +172,31 @@ class TimerCommands():
 
         return None
 
-    async def __send_revenues(self):
-        try:
-            revenues = await get_pretty_revenues()
-        except Exception as e:
-            logging.warning(e)
-            return
+    # async def __send_revenues(self):
+    #     try:
+    #         revenues = await get_pretty_revenues()
+    #     except Exception as e:
+    #         logging.warning(e)
+    #         return
 
-        if len(revenues) <= 0:
-            logging.warning("__send_revenues: revenues is empty")
-            return
+    #     if len(revenues) <= 0:
+    #         logging.warning("__send_revenues: revenues is empty")
+    #         return
 
-        file_name = prepare_file_name('revenues.txt')
-        message: Message = await self.__get_last_file_message("revenues")
-        await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(revenues))
+    #     file_name = prepare_file_name('revenues.txt')
+    #     message: Message = await self.__get_last_file_message("revenues")
+    #     await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(revenues))
 
-    async def __send_admin_scores(self):
-        admin_scores = await get_admin_scores()
-        if len(admin_scores) <= 0:
-            logging.warning("__send_admin_scores: admin_scores is empty")
-            return
+    # async def __send_admin_scores(self):
+    #     admin_scores = await get_admin_scores()
+    #     if len(admin_scores) <= 0:
+    #         logging.warning("__send_admin_scores: admin_scores is empty")
+    #         return
 
-        pretty_data = admin_scores_pretty(admin_scores)
-        file_name = prepare_file_name('admin_scores.txt')
-        message: Message = await self.__get_last_file_message("admin_scores")
-        await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(pretty_data))
+    #     pretty_data = admin_scores_pretty(admin_scores)
+    #     file_name = prepare_file_name('admin_scores.txt')
+    #     message: Message = await self.__get_last_file_message("admin_scores")
+    #     await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(pretty_data))
 
     async def __send_edit_file_message(self, message: Message = None, file_name: str = "", content: str = ""):
         if file_name == None:
@@ -187,26 +214,27 @@ class TimerCommands():
 
         await self.__tick_channel.send(time, file=file)
 
-    async def __send_scores(self):
-        try:
-            scores = await get_pretty_scores()
-        except Exception as e:
-            logging.warning(e)
-            return
+    # async def __send_scores(self):
+    #     try:
+    #         scores = await get_pretty_scores()
+    #     except Exception as e:
+    #         logging.warning(e)
+    #         return
 
-        if len(scores) <= 0:
-            return
+    #     if len(scores) <= 0:
+    #         return
 
-        file_name = prepare_file_name('scores.txt')
-        message: Message = await self.__get_last_file_message("scores")
-        await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(scores))
+    #     file_name = prepare_file_name('scores.txt')
+    #     message: Message = await self.__get_last_file_message("scores")
+    #     await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(scores))
 
     async def loop(self):
         while True:
             tasks = []
             for function in self.__functions:
-                tasks.append(asyncio.create_task(function(), name=function.__name__))
-            tasks.append(asyncio.create_task(asyncio.sleep(60)))
+                tasks.append(asyncio.create_task(
+                    function(), name=function.__name__))
+            tasks.append(asyncio.create_task(asyncio.sleep(30)))
 
             done, pending = await asyncio.wait(tasks, timeout=61, return_when=asyncio.ALL_COMPLETED)
             task: asyncio.Task = None

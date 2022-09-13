@@ -1,5 +1,5 @@
 # For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3-alpine3.16
+FROM python:3.10-slim-buster
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -17,6 +17,7 @@ COPY . ./
 # COPY bot_sorting_peers.py /app
 # COPY file.py /app
 # COPY transfer.py /app
+RUN pip3 install ./libs/
 
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
