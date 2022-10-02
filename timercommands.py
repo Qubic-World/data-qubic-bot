@@ -5,7 +5,6 @@ import logging
 import os
 from datetime import datetime
 from io import BytesIO
-import re
 from typing import Optional
 
 from custom_nats.custom_nats import Nats
@@ -13,16 +12,13 @@ from custom_nats.handler import Handler, HandlerStarter
 from discord import Attachment, Client, Embed, File, Message
 from dotenv import load_dotenv
 from nats.aio.msg import Msg
-from qubic.qubicdata import DataSubjects
+from qubic.qubicdata import DataSubjects, QUORUM
 
-# from bd.mongo import (get_admin_scores, get_min_max_admin_scores,
-#                       get_pretty_scores)
-# from utils.qubicservicesutils import get_pretty_revenues
-# from utils.utils import admin_scores_pretty, prepare_file_name
 from utils.utils import prepare_file_name
 
 _ticks = dict()
 _scores = dict()
+_revenues = dict()
 
 
 class HandlerTick(Handler):
@@ -65,6 +61,28 @@ class HandlerScores(Handler):
             return
 
 
+class HandlerRevenues(Handler):
+    async def get_sub(self):
+        if self._nc.is_disconected:
+            return None
+
+        return await self._nc.subscribe(DataSubjects.REVENUES)
+
+    async def _handler_msg(self, msg: Msg):
+        import zlib
+
+        if msg is None or len(msg.data) <= 0:
+            return
+
+        try:
+            logging.info('Got the revenues')
+            global _revenues
+            _revenues = json.loads(zlib.decompress(msg.data))
+        except Exception as e:
+            logging.exception(e)
+            return
+
+
 class TimerCommands():
     def __init__(self, bot: Client, nc: Optional[Nats] = None) -> None:
         self.__bot: Client = bot
@@ -76,9 +94,8 @@ class TimerCommands():
 
         self.__background_tasks = []
 
-        # self.__functions: list = [self.__send_min_max, self.__send_tick,
-        #                           self.__send_revenues, self.__send_admin_scores, self.__send_scores]
-        self.__functions: list = [self.__send_tick, self.__send_scores]
+        self.__functions: list = [self.__send_tick,
+                                  self.__send_scores, self.__send_revenues]
 
         self.__nc = nc
 
@@ -149,6 +166,8 @@ class TimerCommands():
             HandlerStarter.start(HandlerTick(self.__nc))))
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerScores(self.__nc))))
+        self.__background_tasks.append(asyncio.create_task(
+            HandlerStarter.start(HandlerRevenues(self.__nc))))
 
     # async def __send_min_max(self):
     #     try:
@@ -175,6 +194,23 @@ class TimerCommands():
         file_name = prepare_file_name('scores.txt')
         message: Message = await self.__get_last_file_message("scores")
         await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(pretty_scores))
+
+    async def __send_revenues(self):
+        if len(_revenues) <= 0:
+            return
+
+        pretty_revenues = []
+        for k, v_list in _revenues.items():
+            if len(v_list) <= 0:
+                value = 0
+            else:
+                value = sorted(v_list)[:QUORUM][-1]
+
+            pretty_revenues.append(f'{k}: {value}')
+
+        file_name = prepare_file_name('revenues.txt')
+        message: Message = await self.__get_last_file_message('revenues')
+        await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(pretty_revenues))
 
     async def __send_tick(self):
         import itertools
@@ -245,7 +281,7 @@ class TimerCommands():
 
         file = File(BytesIO(b), filename=file_name)
 
-        time = str(datetime.utcnow().replace(second=0, microsecond=0))
+        time = str(datetime.utcnow().replace(microsecond=0))
         if message != None:
             await message.delete()
 

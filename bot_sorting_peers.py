@@ -67,12 +67,6 @@ async def on_message(message):
         await client.process_commands(message)
         return
 
-    # if not is_valid_author(message.author):
-    #     return
-
-    if message.channel.name != channel_name:
-        return
-
 
 def main():
     import nats
