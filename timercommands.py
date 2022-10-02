@@ -1,8 +1,11 @@
 import asyncio
+from email import message
+import json
 import logging
 import os
 from datetime import datetime
 from io import BytesIO
+import re
 from typing import Optional
 
 from custom_nats.custom_nats import Nats
@@ -16,8 +19,10 @@ from qubic.qubicdata import DataSubjects
 #                       get_pretty_scores)
 # from utils.qubicservicesutils import get_pretty_revenues
 # from utils.utils import admin_scores_pretty, prepare_file_name
+from utils.utils import prepare_file_name
 
 _ticks = dict()
+_scores = dict()
 
 
 class HandlerTick(Handler):
@@ -28,8 +33,6 @@ class HandlerTick(Handler):
         return await self._nc.subscribe(DataSubjects.TICKS)
 
     async def _handler_msg(self, msg: Msg):
-        import json
-
         if msg is None or len(msg.data) <= 0:
             return
 
@@ -37,6 +40,26 @@ class HandlerTick(Handler):
             logging.info('Got the tics')
             global _ticks
             _ticks = json.loads(msg.data)
+        except Exception as e:
+            logging.exception(e)
+            return
+
+
+class HandlerScores(Handler):
+    async def get_sub(self):
+        if self._nc.is_disconected:
+            return None
+
+        return await self._nc.subscribe(DataSubjects.SCORES)
+
+    async def _handler_msg(self, msg: Msg):
+        if msg is None or len(msg.data) <= 0:
+            return
+
+        try:
+            logging.info('Got the scores')
+            global _scores
+            _scores = json.loads(msg.data)
         except Exception as e:
             logging.exception(e)
             return
@@ -55,7 +78,7 @@ class TimerCommands():
 
         # self.__functions: list = [self.__send_min_max, self.__send_tick,
         #                           self.__send_revenues, self.__send_admin_scores, self.__send_scores]
-        self.__functions: list = [self.__send_tick]
+        self.__functions: list = [self.__send_tick, self.__send_scores]
 
         self.__nc = nc
 
@@ -124,6 +147,8 @@ class TimerCommands():
 
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerTick(self.__nc))))
+        self.__background_tasks.append(asyncio.create_task(
+            HandlerStarter.start(HandlerScores(self.__nc))))
 
     # async def __send_min_max(self):
     #     try:
@@ -139,13 +164,25 @@ class TimerCommands():
     #     except Exception as e:
     #         logging.warning(e)
 
+    async def __send_scores(self):
+        if len(_scores) <= 0:
+            return
+
+        pretty_scores = []
+        for k, v in _scores.items():
+            pretty_scores.append(f'{k}: {v}')
+
+        file_name = prepare_file_name('scores.txt')
+        message: Message = await self.__get_last_file_message("scores")
+        await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(pretty_scores))
+
     async def __send_tick(self):
         import itertools
         global _ticks
 
         pretty_tick = []
         pairs = [(k, len(list(g)))
-                 for k, g in itertools.groupby(sorted(_ticks.values(), reverse=True))]
+                 for k, g in itertools.groupby(sorted(_ticks.values(), reverse=True))][:10]
 
         for k, v in pairs:
             tick = k - 1
