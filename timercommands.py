@@ -1,5 +1,4 @@
 import asyncio
-from email import message
 import json
 import logging
 import os
@@ -36,6 +35,7 @@ class HandlerTick(Handler):
             logging.info('Got the tics')
             global _ticks
             _ticks = json.loads(msg.data)
+            # logging.info(_ticks)
         except Exception as e:
             logging.exception(e)
             return
@@ -201,12 +201,14 @@ class TimerCommands():
 
         pretty_revenues = []
         for k, v_list in _revenues.items():
-            if len(v_list) <= 0:
+            rev_number = len(v_list)
+            if rev_number <= 0:
                 value = 0
             else:
-                value = sorted(v_list)[:QUORUM][-1]
+                index = QUORUM - 1 if rev_number >= QUORUM else rev_number - 1
+                value = sorted(v_list)[index]
 
-            pretty_revenues.append(f'{k}: {value}')
+            pretty_revenues.append(f'{k}: {value} (NoV: {rev_number})')
 
         file_name = prepare_file_name('revenues.txt')
         message: Message = await self.__get_last_file_message('revenues')
@@ -218,7 +220,7 @@ class TimerCommands():
 
         pretty_tick = []
         pairs = [(k, len(list(g)))
-                 for k, g in itertools.groupby(sorted(_ticks.values(), reverse=True))][:10]
+                 for k, g in itertools.groupby(sorted(_ticks.values(), reverse=True))]
 
         for k, v in pairs:
             tick = k - 1
