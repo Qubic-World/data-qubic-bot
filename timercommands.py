@@ -94,8 +94,7 @@ class TimerCommands():
 
         self.__background_tasks = []
 
-        self.__functions: list = [self.__send_tick,
-                                  self.__send_scores, self.__send_revenues]
+        self.__functions: list = [self.__send_tick, self.__send_revenues]
 
         self.__nc = nc
 
@@ -141,16 +140,12 @@ class TimerCommands():
         def is_me(message: Message):
             return True or message.author == self.__bot.user
 
-        messages = await self.__tick_channel.history(limit=10).flatten()
+        # messages = await self.__tick_channel.history(limit=10).flatten()
 
-        if len(messages) <= len(self.__functions):
-            return
+        # if len(messages) <= len(self.__functions):
+        #     return
 
-        while True:
-            l = len(await self.__tick_channel.purge(check=is_me))
-            print(l)
-            if l <= 0:
-                break
+        await self.__tick_channel.purge(check=is_me)
 
         return
 
@@ -164,24 +159,10 @@ class TimerCommands():
 
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerTick(self.__nc))))
-        self.__background_tasks.append(asyncio.create_task(
-            HandlerStarter.start(HandlerScores(self.__nc))))
+        # self.__background_tasks.append(asyncio.create_task(
+        #     HandlerStarter.start(HandlerScores(self.__nc))))
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerRevenues(self.__nc))))
-
-    # async def __send_min_max(self):
-    #     try:
-    #         min, max = await get_min_max_admin_scores()
-    #         message = await self.__get_last_minmax_message()
-    #         e = Embed(title="Admin scores [min..max]",
-    #                   description=f"[{min}..{max}]")
-    #         e.set_footer(text=str(TimerCommands.get_utc()))
-    #         if message != None:
-    #             await message.edit(embed=e)
-    #         else:
-    #             await self.__tick_channel.send(embed=e)
-    #     except Exception as e:
-    #         logging.warning(e)
 
     async def __send_scores(self):
         if len(_scores) <= 0:
@@ -247,32 +228,6 @@ class TimerCommands():
 
         return None
 
-    # async def __send_revenues(self):
-    #     try:
-    #         revenues = await get_pretty_revenues()
-    #     except Exception as e:
-    #         logging.warning(e)
-    #         return
-
-    #     if len(revenues) <= 0:
-    #         logging.warning("__send_revenues: revenues is empty")
-    #         return
-
-    #     file_name = prepare_file_name('revenues.txt')
-    #     message: Message = await self.__get_last_file_message("revenues")
-    #     await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(revenues))
-
-    # async def __send_admin_scores(self):
-    #     admin_scores = await get_admin_scores()
-    #     if len(admin_scores) <= 0:
-    #         logging.warning("__send_admin_scores: admin_scores is empty")
-    #         return
-
-    #     pretty_data = admin_scores_pretty(admin_scores)
-    #     file_name = prepare_file_name('admin_scores.txt')
-    #     message: Message = await self.__get_last_file_message("admin_scores")
-    #     await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(pretty_data))
-
     async def __send_edit_file_message(self, message: Message = None, file_name: str = "", content: str = ""):
         if file_name == None:
             logging.warning(
@@ -288,20 +243,6 @@ class TimerCommands():
             await message.delete()
 
         await self.__tick_channel.send(time, file=file)
-
-    # async def __send_scores(self):
-    #     try:
-    #         scores = await get_pretty_scores()
-    #     except Exception as e:
-    #         logging.warning(e)
-    #         return
-
-    #     if len(scores) <= 0:
-    #         return
-
-    #     file_name = prepare_file_name('scores.txt')
-    #     message: Message = await self.__get_last_file_message("scores")
-    #     await self.__send_edit_file_message(message, file_name, f"{os.linesep}".join(scores))
 
     async def loop(self):
         while True:
