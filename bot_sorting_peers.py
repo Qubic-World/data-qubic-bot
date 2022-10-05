@@ -63,9 +63,10 @@ def is_valid_command(message):
 
 @client.event
 async def on_message(message):
-    if(is_valid_command(message)):
-        await client.process_commands(message)
-        return
+    pass
+    # if(is_valid_command(message)):
+    #     await client.process_commands(message)
+    #     return
 
 
 def main():

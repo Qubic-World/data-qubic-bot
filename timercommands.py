@@ -11,7 +11,7 @@ from custom_nats.handler import Handler, HandlerStarter
 from discord import Attachment, Client, Embed, File, Message
 from dotenv import load_dotenv
 from nats.aio.msg import Msg
-from qubic.qubicdata import DataSubjects, QUORUM
+from qubic.qubicdata import DataSubjects, QUORUM, MAX_REVENUE_VALUE
 
 from utils.utils import prepare_file_name
 
@@ -84,6 +84,8 @@ class HandlerRevenues(Handler):
 
 
 class TimerCommands():
+    digets_in_revenue = len(str(int(MAX_REVENUE_VALUE)))
+
     def __init__(self, bot: Client, nc: Optional[Nats] = None) -> None:
         self.__bot: Client = bot
         load_dotenv()
@@ -94,7 +96,8 @@ class TimerCommands():
 
         self.__background_tasks = []
 
-        self.__functions: list = [self.__send_tick, self.__send_revenues]
+        self.__functions: list = [self.__send_tick,
+                                  self.__send_revenues, self.__send_scores]
 
         self.__nc = nc
 
@@ -159,8 +162,8 @@ class TimerCommands():
 
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerTick(self.__nc))))
-        # self.__background_tasks.append(asyncio.create_task(
-        #     HandlerStarter.start(HandlerScores(self.__nc))))
+        self.__background_tasks.append(asyncio.create_task(
+            HandlerStarter.start(HandlerScores(self.__nc))))
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerRevenues(self.__nc))))
 
@@ -170,7 +173,7 @@ class TimerCommands():
 
         pretty_scores = []
         for k, v in _scores.items():
-            pretty_scores.append(f'{k}: {v}')
+            pretty_scores.append(f'{k} {v}')
 
         file_name = prepare_file_name('scores.txt')
         message: Message = await self.__get_last_file_message("scores")
@@ -185,11 +188,14 @@ class TimerCommands():
             rev_number = len(v_list)
             if rev_number <= 0:
                 value = 0
+                percent = 0
             else:
                 index = QUORUM - 1 if rev_number >= QUORUM else rev_number - 1
                 value = sorted(v_list)[index]
+                percent = int(value * 100 / MAX_REVENUE_VALUE)
 
-            pretty_revenues.append(f'{k}: {value} (NoV: {rev_number})')
+            pretty_revenues.append(
+                '{0} {1:>{rev_offset}} {2:>3}% (NoV: {3:>3})'.format(k, value, percent, rev_number, rev_offset=TimerCommands.digets_in_revenue))
 
         file_name = prepare_file_name('revenues.txt')
         message: Message = await self.__get_last_file_message('revenues')
@@ -206,12 +212,12 @@ class TimerCommands():
         for k, v in pairs:
             tick = k - 1
             amount = v
-            pretty_tick.append(f"{tick}: {amount}")
+            pretty_tick.append('{0} {1:>2}'.format(tick,  amount))
 
         if len(pretty_tick) > 0:
             message: Message = await self.__get_last_tick_message()
             e = Embed(title="Ticks",
-                      description=f"{os.linesep}".join(pretty_tick))
+                      description=f'{os.linesep}'.join(pretty_tick))
             e.set_footer(text=str(TimerCommands.get_utc()))
             if message != None:
                 await message.edit(embed=e)
