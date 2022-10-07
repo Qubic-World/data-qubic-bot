@@ -69,7 +69,7 @@ class HandlerRevenues(Handler):
         return await self._nc.subscribe(DataSubjects.REVENUES)
 
     async def _handler_msg(self, msg: Msg):
-        import zlib
+        import zstandard
 
         if msg is None or len(msg.data) <= 0:
             return
@@ -77,7 +77,7 @@ class HandlerRevenues(Handler):
         try:
             logging.info('Got the revenues')
             global _revenues
-            _revenues = json.loads(zlib.decompress(msg.data))
+            _revenues = json.loads(zstandard.decompress(msg.data))
         except Exception as e:
             logging.exception(e)
             return

@@ -18,3 +18,4 @@ toml==0.10.2
 typing_extensions==4.2.0
 yarl==1.7.2
 nats-py==2.1.7
+zstandard
