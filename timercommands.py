@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 import json
 import logging
 import os
@@ -86,6 +87,11 @@ class HandlerRevenues(Handler):
 class TimerCommands():
     digets_in_revenue = len(str(int(MAX_REVENUE_VALUE)))
 
+    @dataclass
+    class MessageTitles:
+        TICK = 'Tick'
+        MINMAX = 'Scores [min...max]'
+
     def __init__(self, bot: Client, nc: Optional[Nats] = None) -> None:
         self.__bot: Client = bot
         load_dotenv()
@@ -96,10 +102,12 @@ class TimerCommands():
 
         self.__background_tasks = []
 
-        self.__functions: list = [self.__send_tick,
+        self.__functions: list = [self.__send_min_max, self.__send_tick,
                                   self.__send_revenues, self.__send_scores]
 
         self.__nc = nc
+        self.__minmax_message = None
+        self.__tick_message = None
 
     @staticmethod
     def get_utc():
@@ -126,10 +134,10 @@ class TimerCommands():
         return None
 
     async def __get_all_tick_message(self, limit: int = 200) -> list:
-        return await self.__get_messages_startwith(startwith="Tick", limit=limit)
+        return await self.__get_messages_startwith(startwith=TimerCommands.MessageTitles.TICK, limit=limit)
 
     async def __get_minmax_messages(self, limit: int = 200) -> list:
-        return await self.__get_messages_startwith(startwith="Admin scores [min..max]", limit=limit)
+        return await self.__get_messages_startwith(startwith=TimerCommands.MessageTitles.MINMAX, limit=limit)
 
     async def __get_last_minmax_message(self) -> Message:
         messages = await self.__get_minmax_messages()
@@ -167,6 +175,10 @@ class TimerCommands():
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerRevenues(self.__nc))))
 
+    @classmethod
+    def set_time_to_footer(cls, e=Embed):
+        e.set_footer(text=str(TimerCommands.get_utc()))
+
     async def __send_scores(self):
         if len(_scores) <= 0:
             return
@@ -201,6 +213,30 @@ class TimerCommands():
         message: Message = await self.__get_last_file_message('revenues')
         await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(pretty_revenues))
 
+    async def __send_min_max(self):
+        from qubic.qubicdata import NUMBER_OF_COMPUTORS
+        if len(_scores) <= 0:
+            return
+
+
+        computor_scores = list(_scores.values())[:NUMBER_OF_COMPUTORS]
+        min_score = min(computor_scores)
+        max_score = max(computor_scores)
+
+        message = self.__minmax_message
+        if message is None:
+            message = await self.__get_last_minmax_message()
+            self.__minmax_message = message
+
+        description = f'[{min_score}..{max_score}]'
+        e = Embed(title=TimerCommands.MessageTitles.MINMAX,
+                  description=description)
+        self.set_time_to_footer(e)
+        if message != None:
+            await message.edit(embed=e)
+        else:
+            self.__minmax_message = await self.__tick_channel.send(embed=e)
+
     async def __send_tick(self):
         import itertools
         global _ticks
@@ -215,14 +251,18 @@ class TimerCommands():
             pretty_tick.append('{0} {1:>2}'.format(tick,  amount))
 
         if len(pretty_tick) > 0:
-            message: Message = await self.__get_last_tick_message()
-            e = Embed(title="Ticks",
+            message: Message = self.__tick_message
+            if message is None:
+                message = await self.__get_last_tick_message()
+                self.__tick_message = message
+
+            e = Embed(title=TimerCommands.MessageTitles.TICK,
                       description=f'{os.linesep}'.join(pretty_tick))
-            e.set_footer(text=str(TimerCommands.get_utc()))
+            self.set_time_to_footer(e)
             if message != None:
                 await message.edit(embed=e)
             else:
-                await self.__tick_channel.send(embed=e)
+                self.__tick_message = await self.__tick_channel.send(embed=e)
 
     async def __get_last_file_message(self, file_name: str, limit=100):
         message: Message = None
