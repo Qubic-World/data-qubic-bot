@@ -90,7 +90,7 @@ class TimerCommands():
     @dataclass
     class MessageTitles:
         TICK = 'Tick'
-        MINMAX = 'Scores [min...max]'
+        MINMAX = 'Scores'
 
     def __init__(self, bot: Client, nc: Optional[Nats] = None) -> None:
         self.__bot: Client = bot
