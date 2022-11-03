@@ -19,6 +19,8 @@ from utils.utils import prepare_file_name
 _ticks = dict()
 _scores = dict()
 _revenues = dict()
+_epoch: int = None
+_last_epoch: int = _epoch
 
 
 class HandlerTick(Handler):
@@ -57,6 +59,7 @@ class HandlerScores(Handler):
             logging.info('Got the scores')
             global _scores
             _scores = json.loads(msg.data)
+            logging.info(f'{_scores}')
         except Exception as e:
             logging.exception(e)
             return
@@ -84,6 +87,26 @@ class HandlerRevenues(Handler):
             return
 
 
+class HandlerEpoch(Handler):
+    async def get_sub(self):
+        if self._nc.is_disconected:
+            return None
+
+        return await self._nc.subscribe(DataSubjects.EPOCH)
+
+    async def _handler_msg(self, msg: Msg):
+        if msg is None or len(msg.data) <= 0:
+            return
+
+        try:
+            logging.info('Got the epoch')
+            global _epoch
+            _epoch = json.loads(msg.data)
+        except Exception as e:
+            logging.exception(e)
+            return
+
+
 class TimerCommands():
     digets_in_revenue = len(str(int(MAX_REVENUE_VALUE)))
 
@@ -91,6 +114,7 @@ class TimerCommands():
     class MessageTitles:
         TICK = 'Tick'
         MINMAX = 'Scores'
+        EPOCH = 'Epoch'
 
     def __init__(self, bot: Client, nc: Optional[Nats] = None) -> None:
         self.__bot: Client = bot
@@ -102,12 +126,13 @@ class TimerCommands():
 
         self.__background_tasks = []
 
-        self.__functions: list = [self.__send_min_max, self.__send_tick,
+        self.__functions: list = [self.__send_epoch, self.__send_min_max, self.__send_tick,
                                   self.__send_revenues, self.__send_scores]
 
         self.__nc = nc
         self.__minmax_message = None
         self.__tick_message = None
+        self.__epoch_message = None
 
     @staticmethod
     def get_utc():
@@ -126,6 +151,13 @@ class TimerCommands():
                 tick_messages.append(message)
 
         return tick_messages
+
+    async def __get_last_epoch_message(self, limit: int = 200) -> Message:
+        messages = await self.__get_messages_startwith(startwith=TimerCommands.MessageTitles.EPOCH, limit=limit)
+        if len(messages) > 0:
+            return messages[0]
+
+        return None
 
     async def __get_last_tick_message(self) -> Message:
         messages = await self.__get_all_tick_message()
@@ -174,18 +206,37 @@ class TimerCommands():
             HandlerStarter.start(HandlerScores(self.__nc))))
         self.__background_tasks.append(asyncio.create_task(
             HandlerStarter.start(HandlerRevenues(self.__nc))))
+        self.__background_tasks.append(asyncio.create_task(
+            HandlerStarter.start(HandlerEpoch(self.__nc))))
 
     @classmethod
     def set_time_to_footer(cls, e=Embed):
         e.set_footer(text=str(TimerCommands.get_utc()))
 
     async def __send_scores(self):
+        from datetime import datetime
         if len(_scores) <= 0:
             return
 
         pretty_scores = []
-        for k, v in _scores.items():
-            pretty_scores.append(f'{k} {v}')
+        sorted_scores = sorted(
+            _scores.items(), key=lambda x: x[1]['s'], reverse=True)
+        logging.info(f'sorted: \n{sorted_scores}')
+        ln = 1
+        for id, data in sorted_scores:
+            try:
+                score = data['s']
+                timestamp = float(data['t'])
+                logging.info(f'score: {score}')
+                logging.info(f'tsm: {timestamp}')
+                pretty_scores.append('{0} {1} {2} {3}'.format(
+                    ln, id, score, datetime.utcfromtimestamp(timestamp)))
+                ln += 1
+            except Exception as e:
+                logging.exception(e)
+                continue
+
+        logging.info(f'pretty:\n{pretty_scores}')
 
         file_name = prepare_file_name('scores.txt')
         message: Message = await self.__get_last_file_message("scores")
@@ -206,29 +257,58 @@ class TimerCommands():
                 value = sorted(v_list)[index]
                 percent = int(value * 100 / MAX_REVENUE_VALUE)
 
-            pretty_revenues.append(
-                '{0} {1:>{rev_offset}} {2:>3}% (NoV: {3:>3})'.format(k, value, percent, rev_number, rev_offset=TimerCommands.digets_in_revenue))
+            pretty_revenues.append((k, value, percent, rev_number))
+
+            # pretty_revenues.append(
+            #     '{0} {1:>{rev_offset}} {2:>3}% (NoV: {3:>3})'.format(k, value, percent, rev_number, rev_offset=TimerCommands.digets_in_revenue))
+
+        sorted_pretty_revenues = sorted(
+            pretty_revenues, key=lambda x: x[2], reverse=True)
+        pretty_revenues = ['{0} {1:>{rev_offset}} {2:>3}% (NoV: {3:>3})'.format(
+            x[0], x[1], x[2], x[3], rev_offset=TimerCommands.digets_in_revenue) for x in sorted_pretty_revenues]
 
         file_name = prepare_file_name('revenues.txt')
         message: Message = await self.__get_last_file_message('revenues')
         await self.__send_edit_file_message(message=message, file_name=file_name, content=f"{os.linesep}".join(pretty_revenues))
+
+    async def __send_epoch(self):
+        global _epoch
+        global _last_epoch
+
+        if _epoch is None or _last_epoch == _epoch:
+            return
+
+        _last_epoch = _epoch
+
+        message = self.__epoch_message
+        if message is None:
+            message = await self.__get_last_epoch_message()
+            self.__epoch_message = message
+
+        description = str(_epoch)
+        e = Embed(title=TimerCommands.MessageTitles.EPOCH,
+                  description=description)
+
+        if message != None:
+            await message.edit(embed=e)
+        else:
+            self.__epoch_message = await self.__tick_channel.send(embed=e)
 
     async def __send_min_max(self):
         from qubic.qubicdata import NUMBER_OF_COMPUTORS
         if len(_scores) <= 0:
             return
 
-
         computor_scores = list(_scores.values())[:NUMBER_OF_COMPUTORS]
-        min_score = min(computor_scores)
-        max_score = max(computor_scores)
+        min_comp_score = min(computor_scores)
+        max_comp_score = max(computor_scores)
 
         message = self.__minmax_message
         if message is None:
             message = await self.__get_last_minmax_message()
             self.__minmax_message = message
 
-        description = f'[{min_score}..{max_score}]'
+        description = f'[{min_comp_score}..{max_comp_score}]'
         e = Embed(title=TimerCommands.MessageTitles.MINMAX,
                   description=description)
         self.set_time_to_footer(e)

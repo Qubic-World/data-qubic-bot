@@ -44,6 +44,8 @@ async def on_ready():
     logging.info('Connect to the nats server')
     nc = Nats()
     await nc.connect()
+    logging.info(f'Server info: {nc.nc._server_info}')
+    logging.info(f'Max payload: {nc.nc.max_payload}')
 
     timer_commands = TimerCommands(client, nc)
     await timer_commands.start()
