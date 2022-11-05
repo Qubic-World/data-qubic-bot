@@ -223,14 +223,16 @@ class TimerCommands():
             _scores.items(), key=lambda x: x[1]['s'], reverse=True)
         logging.info(f'sorted: \n{sorted_scores}')
         ln = 1
+        data: dict = None
         for id, data in sorted_scores:
             try:
-                score = data['s']
-                timestamp = float(data['t'])
+                score = data.get('s', 0)
+                real_score = data.get('r', 0)
+                timestamp = float(data.get('t', 0))
                 logging.info(f'score: {score}')
                 logging.info(f'tsm: {timestamp}')
-                pretty_scores.append('{0} {1} {2} {3}'.format(
-                    ln, id, score, datetime.utcfromtimestamp(timestamp)))
+                pretty_scores.append('{0} {1} {2}/{3} {4}'.format(
+                    ln, id,  real_score, score,datetime.utcfromtimestamp(timestamp)))
                 ln += 1
             except Exception as e:
                 logging.exception(e)
