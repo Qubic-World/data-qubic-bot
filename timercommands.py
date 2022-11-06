@@ -232,7 +232,7 @@ class TimerCommands():
                 logging.info(f'score: {score}')
                 logging.info(f'tsm: {timestamp}')
                 pretty_scores.append('{0} {1} {2}/{3} {4}'.format(
-                    ln, id,  real_score, score,datetime.utcfromtimestamp(timestamp)))
+                    ln, id,  real_score, score, datetime.utcfromtimestamp(timestamp)))
                 ln += 1
             except Exception as e:
                 logging.exception(e)
@@ -302,8 +302,8 @@ class TimerCommands():
             return
 
         computor_scores = list(_scores.values())[:NUMBER_OF_COMPUTORS]
-        min_comp_score = min(computor_scores)
-        max_comp_score = max(computor_scores)
+        min_comp_score = min(computor_scores, key=lambda x: x.get('s', 0)).get('s', 0)
+        max_comp_score = max(computor_scores, key=lambda x: x.get('s', 0)).get('s', 0)
 
         message = self.__minmax_message
         if message is None:
